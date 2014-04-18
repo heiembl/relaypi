@@ -21,6 +21,7 @@ app.use(express.urlencoded());
 app.use(express.methodOverride());
 app.use(app.router);
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.favicon(path.join(__dirname, 'public/images/favicon.ico')));
 
 // development only
 if ('development' == app.get('env')) {
@@ -29,6 +30,7 @@ if ('development' == app.get('env')) {
 
 app.get('/', relay.index);
 app.get('/relays', relay.list);
+app.post('/relays', relay.change);
 
 http.createServer(app).listen(app.get('port'), function(){
   console.log('HTTP-Server listening on port ' + app.get('port'));

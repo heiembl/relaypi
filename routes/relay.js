@@ -1,20 +1,20 @@
 
 /*
  * GET users listing.
- */
-/*
+ *
 var ledStatus = 0;
 var lastChangeDate = (new Date()).getTime();
 
 var Gpio = require('onoff').Gpio,
-    led = new Gpio(24, 'out'),
-    button = new Gpio(23, 'in', 'both');
+    led = new Gpio(24, 'out');
+    //button = new Gpio(23, 'in', 'both');
 
-console.log('GPIO init');
+console.log('GPIO initialized');
 
 led.writeSync(1);
 setTimeout(function(){ led.writeSync(0) }, 100);
 
+/*
 button.watch(function(err, value) {
     if (err) exit();
 
@@ -31,7 +31,8 @@ button.watch(function(err, value) {
         led.writeSync(ledStatus);
     }
 });
-
+*/
+/*
 function exit() {
     console.log('close GPIO...');
     led.unexport();
@@ -42,7 +43,6 @@ function exit() {
 process.on('SIGINT', exit);
 */
 
-
 var Velleman8090 = require('../velleman8090').Velleman8090;
 
 var RelayCard = new Velleman8090();
@@ -52,8 +52,14 @@ exports.index = function(req, res){
 };
 
 exports.list = function(req, res){
+    res.send(RelayCard.getStatus());
+};
 
-    RelayCard.applyRelayChange({ relay1: "toggle"}, function(err, result) {
+exports.change = function(req, res){
+    RelayCard.applyRelayChange(req.body, function(err, result) {
+
+        //led.writeSync((result.relay1 == "on" ? 1 : 0));
+
         res.send(result);
     });
 
