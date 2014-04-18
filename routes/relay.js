@@ -7,8 +7,13 @@ var ledStatus = 0;
 var lastChangeDate = (new Date()).getTime();
 
 var Gpio = require('onoff').Gpio,
-    led = new Gpio(17, 'out'),
-    button = new Gpio(18, 'in');
+    led = new Gpio(24, 'out'),
+    button = new Gpio(23, 'in', 'both');
+
+console.log('GPIO init');
+
+led.writeSync(1);
+setTimeout(function(){ led.writeSync(0) }, 100);
 
 button.watch(function(err, value) {
     if (err) exit();
@@ -28,6 +33,7 @@ button.watch(function(err, value) {
 });
 
 function exit() {
+    console.log('close GPIO...');
     led.unexport();
     button.unexport();
     process.exit();
