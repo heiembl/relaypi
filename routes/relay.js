@@ -58,9 +58,14 @@ exports.list = function(req, res){
 exports.change = function(req, res){
     RelayCard.applyRelayChange(req.body, function(err, result) {
 
-        //led.writeSync((result.relay1 == "on" ? 1 : 0));
+        if(err) {
+            res.status(400).send(err);
+        }
+        else {
+            //led.writeSync((result.relay1 == "on" ? 1 : 0));
 
-        res.send(result);
+            res.send(result);
+        }
     });
 
 };

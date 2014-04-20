@@ -19,24 +19,34 @@ var Definitions = {
 };
 
 //Usefull Functions
-function checkBin(n){return/^[01]{1,64}$/.test(n)}
-function checkDec(n){return/^[0-9]{1,64}$/.test(n)}
-function checkHex(n){return/^[0-9A-Fa-f]{1,64}$/.test(n)}
+function getDefinitionTextFromInt(decValue) {
+    if(decValue == parseInt(Definitions.GET_STATUS, 16)) {
+        return "GET_STATUS";
+    }
+    else if(decValue == parseInt(Definitions.BUTTON_STATE, 16)) {
+        return "BUTTON_STATE";
+    }
+    else if(decValue == parseInt(Definitions.RETRIEVE_STATUS, 16)) {
+        return "RETRIEVE_STATUS";
+    }
+    else if(decValue == parseInt(Definitions.TURN_ON, 16)) {
+        return "TURN_ON";
+    }
+    else if(decValue == parseInt(Definitions.TURN_OFF, 16)) {
+        return "TURN_OFF";
+    }
+    else if(decValue == parseInt(Definitions.TOGGLE, 16)) {
+        return "TOGGLE";
+    }
+    else if(decValue == parseInt(Definitions.GET_VERSION, 16)) {
+        return "GET_VERSION";
+    }
+    else {
+        return "UNKNOWN";
+    }
+}
+
 function pad(s,z){s=""+s;return s.length<z?pad("0"+s,z):s}
-function unpad(s){s=""+s;return s.replace(/^0+/,'')}
-
-//Decimal operations
-function Dec2Bin(n){if(!checkDec(n)||n<0)return 0;return n.toString(2)}
-function Dec2Hex(n){if(!checkDec(n)||n<0)return 0;return n.toString(16)}
-
-//Binary Operations
-function Bin2Dec(n){if(!checkBin(n))return 0;return parseInt(n,2).toString(10)}
-function Bin2Hex(n){if(!checkBin(n))return 0;return parseInt(n,2).toString(16)}
-
-//Hexadecimal Operations
-function Hex2Bin(n){if(!checkHex(n))return 0;return parseInt(n,16).toString(2)}
-function Hex2Dec(n){if(!checkHex(n))return 0;return parseInt(n,16).toString(10)}
-
 
 /**
  * Constructor. Exports a Velleman8090 to userspace.
@@ -111,53 +121,47 @@ function Velleman8090(options) {
         var tempCallback = function(err, result) {
             that.unwatch(tempCallback);
             callback(err, result);
-        }
+        };
 
         that.watch(tempCallback);
 
         that.writeDevice(command, [], function(err, result) {
             if (err) {
-                return callback(err);
+                // on error return immediatly
+                return tempCallback(err, result);
             }
         });
 
         // Timeout setzen??
-    }
+    };
 
-    /*
-    function pollerEventHandler(err, fd, events) {
-        var value = this.readSync(),
-            callbacks = this.listeners.slice(0);
-
-        if (this.opts.debounceTimeout > 0) {
-            setTimeout(function () {
-                if (this.listeners.length > 0) {
-                    // Read current value before polling to prevent unauthentic interrupts.
-                    this.readSync();
-                    this.poller.modify(this.valueFd, Epoll.EPOLLPRI | Epoll.EPOLLONESHOT);
-                }
-            }.bind(this), this.opts.debounceTimeout);
-        }
+    this.notifyStatusChanged = function(err) {
+        // make copy of listeners
+        var callbacks = that.listeners.slice(0);
 
         callbacks.forEach(function (callback) {
-            callback(err, value);
+            if(err) {
+                callback(err);
+            }
+            else {
+                callback(null, that.currentRelayStatus);
+            }
         });
-    } */
-
+    };
 
     this.writeDevice = function(command, relaylist, callback) {
 
-        if( relaylist.length == 0 )
-
-
-        var relayBinaryMask = 0x00;
+        var relayBinaryMask = 0x00,
+            i = 0;
 
         if( Object.prototype.toString.call( relaylist ) === '[object Array]' ) {
-            for (var i = 0; i < relaylist.length; i++) {
+            for (i = 0; i < relaylist.length; i++) {
                 relayBinaryMask |= (1 << (relaylist[i] - 1));
             }
         }
-        else if(command == Definitions.TOGGLE || command == Definitions.TURN_OFF || command == Definitions.TOGGLE) {
+
+        // filter empty relaylist on ON, OFF && Toggle commands
+        if(relayBinaryMask == 0 && ( command == Definitions.TOGGLE || command == Definitions.TURN_OFF || command == Definitions.TURN_ON)) {
             return callback(null, 0);
         }
 
@@ -178,7 +182,7 @@ function Velleman8090(options) {
         hexData += pad(command);
         checkSum += parseInt(command, 16);
 
-        hexData += pad(relayBinaryMask, 2);
+        hexData += pad(relayBinaryMask.toString(16), 2);
         checkSum += relayBinaryMask;
 
         hexData += pad("00", 2);
@@ -187,16 +191,18 @@ function Velleman8090(options) {
         hexData += pad("00", 2);
         checkSum += 0;
 
-        hexData += pad(Dec2Hex(0x101 + ~checkSum),2);
+        hexData += pad((parseInt(0x101 + ~checkSum)).toString(16),2);
         hexData += pad(Definitions.PACKET_ETX);
 
         var bytes = [];
 
-        for(var i=0; i< hexData.length-1; i+=2){
+        for( i=0; i< hexData.length-1; i+=2){
             bytes.push(parseInt(hexData.substr(i, 2), 16));
         }
 
-        this.serialPortHandler.flush(function(err, results) {
+        console.log("-- write cmd=" + getDefinitionTextFromInt(parseInt(command, 16)) + ", relaylist=" + relaylist + ", in hex=" + hexData);
+
+        this.serialPortHandler.flush(function(err) {
             if(err) {
                 console.log('Serial Flush Error: ' + err);
             }
@@ -209,7 +215,7 @@ function Velleman8090(options) {
 
     this.serialPortHandler.on('data', function(hexString) {
 
-        console.log('data received: ' + hexString);
+
 
         // Aufbau:
         // 8-Bit STX
@@ -225,15 +231,18 @@ function Velleman8090(options) {
             packetMASK = parseInt(hexString.substr(4, 2), 16),
             packetPARAM1 = parseInt(hexString.substr(6, 2), 16),
             packetPARAM2 = parseInt(hexString.substr(8, 2), 16),
-            packetCHECKSUM = parseInt(hexString.substr(10, 2), 16),
-            packetETX = parseInt(hexString.substr(12, 2), 16);
+            packetCHECKSUM = parseInt(hexString.substr(10, 2), 16);
+            //packetETX = parseInt(hexString.substr(12, 2), 16);
 
 
         var checkSum = 0x101 + ~(packetSTX + packetCMD + packetMASK + packetPARAM1 + packetPARAM2);
 
         if(checkSum != packetCHECKSUM) {
-            console.log("invalid packet checksum!");
+            console.log("-- received invalid packet (checksum false)! hex:" + hexString);
             return;
+        }
+        else {
+            console.log('-- received valid cmd=' + getDefinitionTextFromInt(packetCMD) + ' in hex:' + hexString);
         }
 
         if( parseInt(Definitions.RETRIEVE_STATUS, 16) == packetCMD) {
@@ -254,18 +263,14 @@ function Velleman8090(options) {
 
             console.log("got status: " + relayLog);
 
-            that.listeners.forEach(function (callback) {
-                callback(null, that.currentRelayStatus);
-            });
+            that.notifyStatusChanged(null);
         }
         else if( parseInt(Definitions.GET_VERSION, 16) == packetCMD) {
 
             that.firmware = (packetPARAM1 - 16 + 2010) + "." + packetPARAM2;
             console.log("got firmware version: " + that.firmware);
 
-            that.listeners.forEach(function (callback) {
-                callback(null, that.currentRelayStatus);
-            });
+            that.notifyStatusChanged(null);
 
         }
         else if( parseInt(Definitions.BUTTON_STATE, 16) == packetCMD) {
@@ -305,22 +310,24 @@ function Velleman8090(options) {
         }
         else {
             // Read the firmware to check connection
-            that.readDevice(Definitions.GET_VERSION, function(err, result) {
+            that.readDevice(Definitions.GET_VERSION, function(err) {
                 if(err) {
-                    console.log('Error on connecting Velleman 8090 card at ' + that.opts.serialInterface + ': ' + error);
+                    console.log('Error on connecting Velleman 8090 card at ' + that.opts.serialInterface + ': ' + err);
                 }
                 else {
-                    console.log('Connected Velleman 8090 card at Interface ' + that.opts.serialInterface  + ' with firmware ' + that.firmware);
-
                     // Read inital Relay Status
-                    that.readDevice(Definitions.GET_STATUS, function(err, result) {
-                        // Status geholt!
+                    that.readDevice(Definitions.GET_STATUS, function(err) {
+                        if(err) {
+                            console.log('Error on retrieving intital status of Velleman 8090 card at ' + that.opts.serialInterface + ': ' + err);
+                        }
+                        else {
+                            console.log('Connected Velleman 8090 card at Interface ' + that.opts.serialInterface  + ' with firmware ' + that.firmware);
+                        }
                     });
                 }
             });
         }
     });
-
 }
 exports.Velleman8090 = Velleman8090;
 
@@ -348,45 +355,59 @@ Velleman8090.prototype.applyRelayChange = function(value, callback) {
     value = value || {};
 
     var listOn = [], listOff = [], listToggle = [];
+    var errorList = "";
 
-    function addToList(value, relayNr){
-        if(value === undefined || value == null) {
-            // do nothing
+    function addToList(theValue, relayNr){
+        if(theValue) {
+            theValue = theValue.toUpperCase();
+            if(theValue == 'ON') {
+                listOn.push(relayNr);
+            }
+            else if(theValue == 'OFF') {
+                listOff.push(relayNr);
+            }
+            else if(theValue == 'TOGGLE') {
+                listToggle.push(relayNr);
+            }
+            else {
+                errorList += "invalid target status: " + theValue + ", ";
+                return false;
+            }
         }
-        else if(value == 'on') {
-            listOn.push(relayNr);
-        }
-        else if(value == 'off') {
-            listOff.push(relayNr);
-        }
-        else if(value == 'toggle') {
-            listToggle.push(relayNr);
-        }
+        return true;
     }
 
-    addToList(value.relay1, 1);
-    addToList(value.relay2, 2);
-    addToList(value.relay3, 3);
-    addToList(value.relay4, 4);
-    addToList(value.relay5, 5);
-    addToList(value.relay6, 6);
-    addToList(value.relay7, 7);
-    addToList(value.relay8, 8);
+    var isOk = true;
+    isOk &= addToList(value.relay1, 1);
+    isOk &= addToList(value.relay2, 2);
+    isOk &= addToList(value.relay3, 3);
+    isOk &= addToList(value.relay4, 4);
+    isOk &= addToList(value.relay5, 5);
+    isOk &= addToList(value.relay6, 6);
+    isOk &= addToList(value.relay7, 7);
+    isOk &= addToList(value.relay8, 8);
+
+    if(!isOk) {
+        return callback(errorList);
+    }
 
 
     var that = this;
-    that.writeDevice(Definitions.TURN_OFF, listOff, function(err, result) {
+    that.writeDevice(Definitions.TURN_OFF, listOff, function(err) {
         if(err) {
+            console.log('error on turn off' + err);
             return callback(err);
         }
 
-        that.writeDevice(Definitions.TURN_ON, listOn, function(err, result) {
+        that.writeDevice(Definitions.TURN_ON, listOn, function(err) {
             if(err) {
+                console.log('error on turn on' + err);
                 return callback(err);
             }
 
-            that.writeDevice(Definitions.TOGGLE, listToggle, function(err, result) {
+            that.writeDevice(Definitions.TOGGLE, listToggle, function(err) {
                 if(err) {
+                    console.log('error on toggle:' + err);
                     return callback(err);
                 }
                 that.readDevice(Definitions.GET_STATUS, function(err, result) {
@@ -431,7 +452,9 @@ Velleman8090.prototype.watch = function(callback) {
 };
 
 /**
- * Stop watching for hardware interrupts on the GPIO.
+ * Stop watching for status changed
+ *
+ * if callback is not a function, all listeners will be removed
  */
 Velleman8090.prototype.unwatch = function(callback) {
     if (this.listeners.length > 0) {
@@ -443,12 +466,5 @@ Velleman8090.prototype.unwatch = function(callback) {
             });
         }
     }
-};
-
-/**
- * Remove all watchers for the Status.
- */
-Velleman8090.prototype.unwatchAll = function() {
-    this.unwatch();
 };
 
