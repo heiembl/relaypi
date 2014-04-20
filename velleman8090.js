@@ -6,6 +6,7 @@ var SerialPort = require("serialport").SerialPort;
 
 exports.version = '0.0.1';
 
+// Hexadecimal 2 digit Definitions of the supported Commands of the Velleman 8090 card
 var Definitions = {
     PACKET_STX:         "04",
     PACKET_ETX:         "0f",
@@ -15,10 +16,14 @@ var Definitions = {
     TURN_ON:            "11",
     TURN_OFF:           "12",
     TOGGLE:             "14",
-    GET_VERSION:        "71"
+    GET_VERSION:        "71",
+    SET_BUTTON_MODE:    "21", //momentary, toggle or timed
+    START_TIMER:        "41",
+    SET_DELAY:          "42",
+    GET_BUTTON_MODE:    "22"
 };
 
-//Usefull Functions
+//Helper-Functions
 function getDefinitionTextFromInt(decValue) {
     if(decValue == parseInt(Definitions.GET_STATUS, 16)) {
         return "GET_STATUS";
@@ -181,7 +186,7 @@ function Velleman8090(options) {
             return callback(null, 0);
         }
 
-        // Aufbau:
+        // Packet content:
         // 8-Bit STX
         // 8-Bit COMMAND
         // 8-Bit MASK
@@ -229,10 +234,7 @@ function Velleman8090(options) {
     };
 
     this.serialPortHandler.on('data', function(hexString) {
-
-
-
-        // Aufbau:
+        // Packet content:
         // 8-Bit STX
         // 8-Bit COMMAND
         // 8-Bit MASK
