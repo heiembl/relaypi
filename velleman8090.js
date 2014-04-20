@@ -427,6 +427,7 @@ Velleman8090.prototype.applyRelayChange = function(value, callback) {
                     console.log('error on toggle:' + err);
                     return callback(err);
                 }
+
                 that.readDevice(Definitions.GET_STATUS, function(err, result) {
                     if(err) {
                         return callback(err);
