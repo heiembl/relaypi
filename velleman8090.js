@@ -48,6 +48,22 @@ function getDefinitionTextFromInt(decValue) {
 
 function pad(s,z){s=""+s;return s.length<z?pad("0"+s,z):s}
 
+
+function flipbit(a)
+{
+    if (a > 255 ) a ^= (1 << 8);
+    a ^= (1 << 0);
+    a ^= (1 << 1);
+    a ^= (1 << 2);
+    a ^= (1 << 3);
+    a ^= (1 << 4);
+    a ^= (1 << 5);
+    a ^= (1 << 6);
+    a ^= (1 << 7);
+
+    return a;
+}
+
 /**
  * Constructor. Exports a Velleman8090 to userspace.
  *
@@ -191,7 +207,7 @@ function Velleman8090(options) {
         hexData += pad("00", 2);
         checkSum += 0;
 
-        hexData += pad((parseInt(0x101 + ~checkSum)).toString(16),2);
+        hexData += pad((parseInt(flipbit(checkSum) + 1)).toString(16),2);
         hexData += pad(Definitions.PACKET_ETX);
 
         var bytes = [];
@@ -207,7 +223,6 @@ function Velleman8090(options) {
                 console.log('Serial Flush Error: ' + err);
             }
             else {
-                //console.log('writeHex: ' + data + " [length=" + data.length + "] writeBinary: " + bytes);
                 that.serialPortHandler.write(new Buffer(bytes), callback);
             }
         });
@@ -234,8 +249,7 @@ function Velleman8090(options) {
             packetCHECKSUM = parseInt(hexString.substr(10, 2), 16);
             //packetETX = parseInt(hexString.substr(12, 2), 16);
 
-
-        var checkSum = 0x101 + ~(packetSTX + packetCMD + packetMASK + packetPARAM1 + packetPARAM2);
+        var checkSum = flipbit(packetSTX + packetCMD + packetMASK + packetPARAM1 + packetPARAM2) + 1;
 
         if(checkSum != packetCHECKSUM) {
             console.log("-- received invalid packet (checksum false)! hex:" + hexString);
@@ -357,17 +371,17 @@ Velleman8090.prototype.applyRelayChange = function(value, callback) {
     var listOn = [], listOff = [], listToggle = [];
     var errorList = "";
 
-    function addToList(theValue, relayNr){
+    function addToList(theValue, relayList){
         if(theValue) {
             theValue = theValue.toUpperCase();
             if(theValue == 'ON') {
-                listOn.push(relayNr);
+                listOn = listOn.concat(relayList);
             }
             else if(theValue == 'OFF') {
-                listOff.push(relayNr);
+                listOff = listOff.concat(relayList);
             }
             else if(theValue == 'TOGGLE') {
-                listToggle.push(relayNr);
+                listToggle = listToggle.concat(relayList);
             }
             else {
                 errorList += "invalid target status: " + theValue + ", ";
@@ -378,14 +392,15 @@ Velleman8090.prototype.applyRelayChange = function(value, callback) {
     }
 
     var isOk = true;
-    isOk &= addToList(value.relay1, 1);
-    isOk &= addToList(value.relay2, 2);
-    isOk &= addToList(value.relay3, 3);
-    isOk &= addToList(value.relay4, 4);
-    isOk &= addToList(value.relay5, 5);
-    isOk &= addToList(value.relay6, 6);
-    isOk &= addToList(value.relay7, 7);
-    isOk &= addToList(value.relay8, 8);
+    isOk &= addToList(value.all, [1,2,3,4,5,6,7,8]); // it would be pretty if the user can define aliases themself
+    isOk &= addToList(value.relay1, [1]);
+    isOk &= addToList(value.relay2, [2]);
+    isOk &= addToList(value.relay3, [3]);
+    isOk &= addToList(value.relay4, [4]);
+    isOk &= addToList(value.relay5, [5]);
+    isOk &= addToList(value.relay6, [6]);
+    isOk &= addToList(value.relay7, [7]);
+    isOk &= addToList(value.relay8, [8]);
 
     if(!isOk) {
         return callback(errorList);
